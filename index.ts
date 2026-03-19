@@ -104,6 +104,7 @@ async function startChat() {
 			err instanceof Error ? err.message : err,
 		);
 	} finally {
+		console.log(`\n${clr.system("Goodbye!")}`);
 		rl.close();
 	}
 }
