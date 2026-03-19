@@ -1,97 +1,63 @@
-# llm-rx-chat
+# LLM-RX-CHAT
 
-An elegant LLM chat interface featuring high-performance binary session persistence via [REXC](https://github.com/creationix/rx).
+A high-performance, terminal-based AI chat application powered by Bun and Pocket TTS. Now featuring a fully autonomous Agentic Workspace with secure tool-execution logic.
 
-## Features
+## Key Features
+- Agentic Tools: Autonomous read_file, write_file, delete_file, run_command, and **web_search**.
+- Secure Sandbox: Every action is strictly confined to a designated workspace/ room with built-in path-traversal guards.
+- Pocket TTS: Low-latency, human-like voice responses with voice-cloning capabilities based on Kokoro-82M.
+- RAG-Ready: Integrated document indexing and similarity search using PostgreSQL and pgvector.
+- History Sync: Persistent conversation history for multi-session Memory.
 
-- **Continuous Sessions**: Interactive terminal-based chat with conversation memory.
-- **REXC Persistence**: High-velocity binary storage for session history using `@creationix/rx`.
-- **Autonomous RAG**: Private knowledge search using `pgvector` with smart selective retrieval—it triggers only for technical topics it has automatically learned from your docs.
-- **Real-Time Voice**: High-fidelity Text-to-Speech integration for seamless conversational flow.
-- **Slash Commands**: Workspace control via `/load`, `/voice`, `/add-rag`, `/list-rag`, `/del-rag`, `/system`, etc.
-- **Pure Streaming**: Real-time token output with metadata filtering for clean reading.
-- **Flexible & Lightweight**: Built for Bun and compatible with any OpenAI-compatible API.
+## Setup (Ground Up)
 
-## Installation
-
+### System Dependency (Arch Linux)
 ```bash
+sudo pacman -S mpv
+```
+
+### Project Dependencies
+Install the main chat client and sync the speech backend:
+```bash
+# Chat Client (Bun)
 bun install
-```
 
-## Usage
-
-### Simple Chat
-Start a new conversation:
-```bash
-bun index.ts
-```
-
-### Managed Sessions
-Load, switch, or save specific sessions (`history/<name>.rx`):
-```bash
-bun index.ts -s my-research
-```
-
-### Integrated Commands
-Use slash commands directly in the chat to manage your workspace:
-- `/add-rag <url|path>`: Index source into vector store.
-- `/del-rag <url|path>`: Purge a specific source from RAG.
-- `/list-rag`: View all indexed document sources and active "Hotwords."
-- `/voice`: Toggle real-time speech output on/off.
-- `/sessions`: List all available conversation histories.
-- `/load <name>`: Switch conversation context instantly.
-- `/system <prompt>`: Update the AI's persona.
-- `/info`: View context and model status.
-
-## Database Setup (pgvector)
-Run the following to start the private knowledge store:
-```bash
-# 1. Build the vector engine (from postgres-pgvector/)
-docker build -t postgres-pgvector .
-
-# 2. Start the container
-docker run -d --name pg-vector-chat -p 5432:5432 postgres-pgvector
-
-# 3. Control the container
-docker start/stop/restart pg-vector-chat
-```
-
-## Voice Setup (Pocket TTS)
-Run the following to start the dedicated speech engine:
-```bash
-# 1. Enter the server directory
+# Speech Server (Python + uv)
 cd tts-server
-
-# 2. Sync dependencies
 uv sync
-
-# 3. Start the Speech Hub
 uv run main.py
 ```
-*(Requires `mpv` installed on the system for playback)*
 
-## Configuration
-Create a `.env` file with these exact keys:
+### 2. Launch AI (within its room)
+In your main project folder:
+```bash
+# Start Lucifer (default /workspace)
+bun index.ts -w workspace
+```
+
+## Configuration (.env)
+Create a .env in the root:
 ```env
 API_BASE=http://localhost:8000/v1
 MODEL=local
-SYSTEM_PROMPT="Assistant."
 
-# RAG Configuration
-RAG_ENABLED=true             # Set to false to disable RAG completely
-API_EMBEDDING_URL=http://localhost:8889/v1/embeddings
-POSTGRES_VECTOR_DIM=768      # Vector dimension (e.g. 768 or 1536)
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=vectordb
-POSTGRES_USER=vectoruser
-POSTGRES_PASSWORD=vectorpass
+# Agentic Persona
+SYSTEM_PROMPT="You are Lucifer... Tired, clever, occasionally moody... You have surgical TOOLS to read, write, and delete files."
+
+# Workspace Path
+WORKSPACE=./workspace
 
 # TTS Configuration
-TTS_ENABLED=false            # Set to true for auto-voice responses
+TTS_ENABLED=true
 TTS_URL=http://localhost:8000
-TTS_VOICE=joe-biden          # Available: 'donald-trump', 'joe-biden'
+TTS_VOICE=donald-trump
 ```
 
+## Admin & CRUD
+See ADMIN.md for specialized recovery strings, including:
+- pkill mpv - Immediate voice silence
+- /delete_file <path> - Remove project data
+- sed room-sync logic for restricted enclaves
+
 ---
-*Powered by @creationix/rx and pgvector for zero-friction LLM interactions.*
+*Built with rhythmic precision and high-performance logic.*

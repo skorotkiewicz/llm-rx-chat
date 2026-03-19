@@ -1,14 +1,18 @@
 import { stringify } from "@creationix/rx";
+import type { ToolCall } from "./types";
 
 /**
  * SSE Token Parsing
  */
-export function parseToken(line: string): string | null {
+export function parseToken(line: string): string | ToolCall[] | null {
 	if (!line.startsWith("data: ")) return null;
-	if (line === "data: [DONE]") return null;
+	const body = line.slice(6).trim();
+	if (!body || body === "[DONE]") return null;
 	try {
-		const data = JSON.parse(line.slice(6));
-		return data.choices[0]?.delta?.content || null;
+		const data = JSON.parse(body);
+		const delta = data.choices[0]?.delta;
+		if (delta?.tool_calls) return delta.tool_calls;
+		return delta?.content || null;
 	} catch {
 		return null;
 	}

@@ -210,7 +210,9 @@ export async function handleCommand(
 		}
 		try {
 			await rag.deleteSource(url);
-			console.log(`${clr.warn(`\n[Knowledge Source '${url}' purged from RAG]`)}\n`);
+			console.log(
+				`${clr.warn(`\n[Knowledge Source '${url}' purged from RAG]`)}\n`,
+			);
 		} catch (err) {
 			process.stdout.write(
 				`${clr.error(`Failed: ${err instanceof Error ? err.message : err}`)}\n`,

@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import * as readline from "node:readline/promises";
 import { clr } from "./lib/colors";
 import { type ChatState, handleCommand } from "./lib/commands";
@@ -5,7 +6,9 @@ import { CONFIG, getSystemPrompt } from "./lib/config";
 import { rag } from "./lib/rag";
 import { loadHistory, saveHistory } from "./lib/session";
 import { iterTokens, rxWrite } from "./lib/stream";
+import { TOOL_DEFINITIONS, TOOLS } from "./lib/tools";
 import { speak } from "./lib/tts";
+import type { ChatMessage, CompleteToolCall, ToolCall } from "./lib/types";
 
 // Configuration
 const historyDir = CONFIG.HISTORY_DIR;
@@ -26,6 +29,12 @@ async function startChat() {
 	const sIdx = process.argv.indexOf("-s");
 	const sessionArg = sIdx !== -1 ? process.argv[sIdx + 1] : undefined;
 	const initialSession = sessionArg || null;
+
+	const wIdx = process.argv.indexOf("-w");
+	if (wIdx !== -1 && process.argv[wIdx + 1]) {
+		CONFIG.WORKSPACE = resolve(process.argv[wIdx + 1] || ".");
+		console.log(`${clr.system(`[Workspace set to: ${CONFIG.WORKSPACE}]`)}\n`);
+	}
 
 	// Initialize Chat State (Mutable object for modular updates)
 	const state: ChatState = {
@@ -53,7 +62,7 @@ async function startChat() {
 	if (CONFIG.RAG_ENABLED) {
 		await rag.init();
 		const extracted = await rag.getKeywords();
-		for (const w of extracted) {
+		for (const w of Array.from(extracted)) {
 			hotwords.add(w);
 		}
 	} else {
@@ -78,7 +87,7 @@ async function startChat() {
 					if (CONFIG.RAG_ENABLED) {
 						hotwords.clear();
 						const extracted = await rag.getKeywords();
-						for (const w of extracted) {
+						for (const w of Array.from(extracted)) {
 							hotwords.add(w);
 						}
 					}
@@ -107,44 +116,126 @@ async function startChat() {
 				}
 			}
 
-			const response = await fetch(`${CONFIG.API_BASE}/chat/completions`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					model: CONFIG.MODEL,
-					messages: apiMessages,
-					stream: true,
-					stop: ["<|im_end|>"],
-				}),
-			});
-
-			if (!response.body || !response.ok) {
-				throw new Error(`API Error: ${response.statusText}`);
-			}
-
-			process.stdout.write(`${clr.ai("AI:")} `);
-
 			let fullAssistantResponse = "";
 			let sentenceBuffer = "";
-			for await (const token of iterTokens(response)) {
-				rxWrite(token);
-				fullAssistantResponse += token;
-				sentenceBuffer += token;
 
-				if (CONFIG.TTS_ENABLED) {
-					// Speak on sentence end but don't block
-					const isSentenceEnd = /[.!?\n]/.test(token);
-					if (isSentenceEnd) {
-						const s = sentenceBuffer.trim();
-						// Ignore common short abbreviations to prevent choppy speech
-						const isAbbreviation =
-							/\b(mr|ms|mrs|dr|prof|vs|st|rd|oz|kg|lb)\.$/i.test(s);
-						if (s.length > 5 && !isAbbreviation) {
-							speak(s); // Background task
-							sentenceBuffer = "";
+			const callLLM = async (messages: ChatMessage[]): Promise<Response> => {
+				const res = await fetch(`${CONFIG.API_BASE}/chat/completions`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						model: CONFIG.MODEL,
+						messages: messages,
+						stream: true,
+						tools: TOOL_DEFINITIONS,
+						tool_choice: "auto",
+						stop: ["<|im_end|>"],
+					}),
+				});
+				if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+				return res;
+			};
+
+			let currentResponse = await callLLM(apiMessages);
+			process.stdout.write(`${clr.ai("AI:")} `);
+
+			while (true) {
+				const toolCallMap = new Map<number, ToolCall>();
+				fullAssistantResponse = "";
+
+				for await (const token of iterTokens(currentResponse)) {
+					if (Array.isArray(token)) {
+						for (const tc of token) {
+							const idx = tc.index ?? 0;
+							let entry = toolCallMap.get(idx);
+							if (!entry) {
+								entry = {
+									id: "",
+									type: "function",
+									function: { name: "", arguments: "" },
+								};
+								toolCallMap.set(idx, entry);
+							}
+
+							if (tc.id) entry.id = tc.id;
+							if (tc.type) entry.type = tc.type;
+							const ef = entry.function;
+							if (tc.function && ef) {
+								if (tc.function.name) ef.name = tc.function.name;
+								if (tc.function.arguments) {
+									ef.arguments = (ef.arguments || "") + tc.function.arguments;
+								}
+							}
+						}
+						continue;
+					}
+
+					const t = typeof token === "string" ? token : "";
+					rxWrite(t);
+					fullAssistantResponse += t;
+					sentenceBuffer += t;
+
+					if (CONFIG.TTS_ENABLED) {
+						const isSentenceEnd = /[.!?\n]/.test(t);
+						if (isSentenceEnd) {
+							const s = sentenceBuffer.trim();
+							const isAbbreviation =
+								/\b(mr|ms|mrs|dr|prof|vs|st|rd|oz|kg|lb)\.$/i.test(s);
+							if (s.length > 5 && !isAbbreviation) {
+								speak(s);
+								sentenceBuffer = "";
+							}
 						}
 					}
 				}
+
+				const toolCalls = Array.from(
+					toolCallMap.values(),
+				) as CompleteToolCall[];
+				if (toolCalls.length === 0) break;
+
+				// Process Tools
+				const assistantMsg: ChatMessage = {
+					role: "assistant",
+					content: fullAssistantResponse,
+					tool_calls: toolCalls,
+				};
+				apiMessages.push(assistantMsg);
+				state.messages.push(assistantMsg);
+
+				for (const call of toolCalls) {
+					if (!call.function) continue;
+					const name = call.function.name as keyof typeof TOOLS;
+					let args: Record<string, unknown>;
+					try {
+						args = JSON.parse(call.function.arguments || "{}");
+					} catch {
+						process.stdout.write(
+							`${clr.error(`\n[Failed to parse arguments for ${name}: ${call.function.arguments}]`)}\n`,
+						);
+						continue;
+					}
+
+					process.stdout.write(
+						`${clr.system(`\n[Executing ${name}(${JSON.stringify(args)})]`)}\n`,
+					);
+
+					const result = await (
+						TOOLS[name] as (args: Record<string, unknown>) => Promise<string>
+					)(args as Record<string, unknown>);
+					const toolMsg: ChatMessage = {
+						role: "tool",
+						tool_call_id: call.id || "",
+						name: name,
+						content: result,
+					};
+					apiMessages.push(toolMsg);
+					state.messages.push(toolMsg);
+				}
+
+				// Get next turn from AI with tool results
+				process.stdout.write(`${clr.ai("\nAI:")} `);
+				currentResponse = await callLLM(apiMessages);
 			}
 
 			// Final flush
@@ -152,6 +243,7 @@ async function startChat() {
 				speak(sentenceBuffer.trim());
 			}
 
+			// Add final assistant message content
 			state.messages.push({
 				role: "assistant",
 				content: fullAssistantResponse,

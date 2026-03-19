@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import * as cheerio from "cheerio";
-import pg from "pg";
+import * as pg from "pg";
 import { registerType } from "pgvector/pg";
 import { clr } from "./colors";
 import { CONFIG } from "./config";
@@ -107,7 +107,7 @@ export class RAG {
 				 LIMIT $2`,
 				[JSON.stringify(vector), limit],
 			);
-			return rows.map((r) => r.content);
+			return rows.map((r: { content: string }) => r.content);
 		} catch (err) {
 			process.stdout.write(
 				`${clr.warn(`[RAG Warning: ${err instanceof Error ? err.message : err}]`)}\n`,
@@ -142,7 +142,9 @@ export class RAG {
 		try {
 			await this.pool.query("DELETE FROM rag_documents WHERE url = $1", [url]);
 		} catch (err) {
-			throw new Error(`Failed to delete source: ${err instanceof Error ? err.message : err}`);
+			throw new Error(
+				`Failed to delete source: ${err instanceof Error ? err.message : err}`,
+			);
 		}
 	}
 
@@ -162,3 +164,4 @@ export class RAG {
 }
 
 export const rag = new RAG();
+// TEST CHANGE
