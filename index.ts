@@ -1,8 +1,5 @@
+import * as readline from "node:readline/promises";
 import { stringify } from "@creationix/rx";
-
-/**
- * Premium LLM Chat using @creationix/rx for reactive streaming output.
- */
 
 // Configuration - matches your requested endpoint
 const API_BASE = "http://192.168.0.124:8888/v1";
@@ -14,84 +11,109 @@ interface ChatMessage {
 	content: string;
 }
 
-async function startChat(prompt: string) {
-	const messages: ChatMessage[] = [
-		{ role: "system", content: SYSTEM_PROMPT },
-		{ role: "user", content: prompt },
-	];
+async function startChat() {
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	});
+
+	const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+
+	console.log(
+		"\x1b[1;35m--- LLM Chat (Type 'exit' or 'quit' to end) ---\x1b[0m\n",
+	);
 
 	try {
-		const response = await fetch(`${API_BASE}/chat/completions`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				model: MODEL,
-				messages,
-				stream: true,
-			}),
-		});
-
-		if (!response.body) {
-			throw new Error("API returned an empty body.");
-		}
-
-		console.log("\x1b[1;36mAI:\x1b[0m ");
-
-		const reader = response.body.getReader();
-		const decoder = new TextDecoder();
-		let buffer = "";
-
 		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
+			const prompt = await rl.question("\x1b[1;32mUser:\x1b[0m ");
 
-			// Decode the raw chunk and add to buffer
-			buffer += decoder.decode(value, { stream: true });
+			if (
+				prompt.toLowerCase() === "exit" ||
+				prompt.toLowerCase() === "quit" ||
+				prompt.toLowerCase() === "q"
+			) {
+				console.log("\n\x1b[1;35mGoodbye!\x1b[0m");
+				break;
+			}
 
-			// Process lines (OpenAI streams are data-only SSE)
-			const lines = buffer.split("\n");
-			buffer = lines.pop() || "";
+			if (!prompt.trim()) continue;
 
-			for (const line of lines) {
-				const trimmed = line.trim();
-				if (!trimmed || trimmed === "data: [DONE]") continue;
+			messages.push({ role: "user", content: prompt });
 
-				if (trimmed.startsWith("data: ")) {
-					try {
-						const data = JSON.parse(trimmed.slice(6));
-						const token = data.choices[0]?.delta?.content;
+			const response = await fetch(`${API_BASE}/chat/completions`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					model: MODEL,
+					messages,
+					stream: true,
+				}),
+			});
 
-						if (token) {
-							/**
-							 * WE USE @creationix/rx HERE:
-							 * We use the stringify onChunk pattern but filter out chunks
-							 * starting with the ',' tag to "Remove numbers" from the output.
-							 */
-							stringify(token, {
-								onChunk: (chunk) => {
-									if (!chunk.startsWith(",")) {
-										process.stdout.write(chunk);
-									}
-								},
-							});
+			if (!response.body) {
+				throw new Error("API returned an empty body.");
+			}
+
+			process.stdout.write("\x1b[1;36mAI:\x1b[0m ");
+
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = "";
+			let fullAssistantResponse = "";
+
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+
+				// Decode the raw chunk and add to buffer
+				buffer += decoder.decode(value, { stream: true });
+
+				// Process lines (OpenAI streams are data-only SSE)
+				const lines = buffer.split("\n");
+				buffer = lines.pop() || "";
+
+				for (const line of lines) {
+					const trimmed = line.trim();
+					if (!trimmed || trimmed === "data: [DONE]") continue;
+
+					if (trimmed.startsWith("data: ")) {
+						try {
+							const data = JSON.parse(trimmed.slice(6));
+							const token = data.choices[0]?.delta?.content;
+
+							if (token) {
+								/**
+								 * WE USE @creationix/rx HERE:
+								 * Filtered stream to remove metadata numbers while keeping stringify pattern.
+								 */
+								stringify(token, {
+									onChunk: (chunk) => {
+										if (!chunk.startsWith(",")) {
+											process.stdout.write(chunk);
+										}
+									},
+								});
+								fullAssistantResponse += token;
+							}
+						} catch {
+							// Partial JSON chunk, skip
 						}
-					} catch (e) {
-						// Partial JSON chunk, skip and wait for more data
 					}
 				}
 			}
+
+			messages.push({ role: "assistant", content: fullAssistantResponse });
+			process.stdout.write("\n\n");
 		}
-		process.stdout.write("\n\n");
 	} catch (error) {
 		console.error(
 			"\x1b[1;31mError:\x1b[0m",
 			error instanceof Error ? error.message : error,
 		);
+	} finally {
+		rl.close();
 	}
 }
 
-// Get prompt from CLI args
-const userQuery =
-	process.argv.slice(2).join(" ") || "Explain the REXC format briefly.";
-console.log(`\x1b[1;32mUser:\x1b[0m ${userQuery}`);
-startChat(userQuery);
+// Start the interactive session
+startChat();
