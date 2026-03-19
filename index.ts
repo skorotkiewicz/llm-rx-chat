@@ -5,6 +5,7 @@ import { CONFIG, getSystemPrompt } from "./lib/config";
 import { rag } from "./lib/rag";
 import { loadHistory, saveHistory } from "./lib/session";
 import { iterTokens, rxWrite } from "./lib/stream";
+import { speak } from "./lib/tts";
 
 // Configuration
 const historyDir = CONFIG.HISTORY_DIR;
@@ -124,9 +125,29 @@ async function startChat() {
 			process.stdout.write(`${clr.ai("AI:")} `);
 
 			let fullAssistantResponse = "";
+			let sentenceBuffer = "";
 			for await (const token of iterTokens(response)) {
 				rxWrite(token);
 				fullAssistantResponse += token;
+				sentenceBuffer += token;
+
+				// Speak on sentence end but don't block
+				const isSentenceEnd = /[.!?\n]/.test(token);
+				if (isSentenceEnd) {
+					const s = sentenceBuffer.trim();
+					// Ignore common short abbreviations to prevent choppy speech
+					const isAbbreviation =
+						/\b(mr|ms|mrs|dr|prof|vs|st|rd|oz|kg|lb)\.$/i.test(s);
+					if (s.length > 5 && !isAbbreviation) {
+						speak(s); // Background task
+						sentenceBuffer = "";
+					}
+				}
+			}
+
+			// Final flush
+			if (sentenceBuffer.trim()) {
+				speak(sentenceBuffer.trim());
 			}
 
 			state.messages.push({

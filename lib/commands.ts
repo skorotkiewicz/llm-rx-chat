@@ -34,7 +34,7 @@ export async function handleCommand(
 
 	if (cmd === "/help") {
 		console.log(
-			`${clr.system("\n--- Commands ---")}\n/help           - This menu\n/info           - Session status\n/sessions       - List available histories\n/load <name>    - Switch conversation\n/del <name>     - Delete a session\n/add-rag <url>  - Index a website\n/del-rag <url>  - Remove indexed content\n/list-rag       - Show indexed docs & hotwords\n/system <p>     - Change persona\n/clear          - Reset context\n/save           - Force save\n/exit           - Quit\n`,
+			`${clr.system("\n--- Commands ---")}\n/help           - This menu\n/info           - Session status\n/sessions       - List available histories\n/load <name>    - Switch conversation\n/del <name>     - Delete a session\n/voice          - Toggle TTS voice\n/add-rag <url>  - Index a website\n/del-rag <url>  - Remove indexed content\n/list-rag       - Show indexed docs & hotwords\n/system <p>     - Change persona\n/clear          - Reset context\n/save           - Force save\n/exit           - Quit\n`,
 		);
 		return "continue";
 	}
@@ -125,6 +125,14 @@ export async function handleCommand(
 			content: getSystemPrompt(),
 		});
 		console.log(`${clr.warn("\nContext cleared.")}\n`);
+		return "continue";
+	}
+
+	if (cmd === "/voice") {
+		CONFIG.TTS_ENABLED = !CONFIG.TTS_ENABLED;
+		console.log(
+			`${clr.warn(`\n[Voice output: ${CONFIG.TTS_ENABLED ? "ENABLED" : "DISABLED"}]`)}\n`,
+		);
 		return "continue";
 	}
 

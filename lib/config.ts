@@ -10,6 +10,9 @@ export const CONFIG = {
 	HISTORY_DIR: "history",
 	RAG_ENABLED: process.env.RAG_ENABLED === "true",
 	VECTOR_DIMENSION: parseInt(process.env.POSTGRES_VECTOR_DIM || "768", 10),
+	TTS_ENABLED: process.env.TTS_ENABLED === "true",
+	TTS_URL: process.env.TTS_URL || "http://localhost:8000",
+	TTS_VOICE: process.env.TTS_VOICE || "joe-biden",
 	PG: {
 		host: process.env.POSTGRES_HOST || "localhost",
 		port: parseInt(process.env.POSTGRES_PORT || "5432", 10),
