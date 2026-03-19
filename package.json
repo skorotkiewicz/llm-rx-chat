@@ -1,0 +1,15 @@
+{
+  "name": "llm-rx-chat",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@creationix/rx": "^0.7.4"
+  }
+}
