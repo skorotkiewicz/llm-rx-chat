@@ -72,6 +72,11 @@ export const TOOLS = {
     } catch (e) {
       return `Error: ${e instanceof Error ? e.message : String(e)}`;
     }
+  },
+  speak: async ({ text }: { text: string }) => {
+    const { speak: ttsSpeak } = await import("./tts");
+    await ttsSpeak(text);
+    return `Success: Spoke "${text}"`;
   }
 };
 
@@ -136,6 +141,18 @@ export const TOOL_DEFINITIONS = [
         type: "object",
         properties: { query: { type: "string" } },
         required: ["query"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "speak",
+      description: "Vocalize text using the TTS system.",
+      parameters: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"]
       }
     }
   }

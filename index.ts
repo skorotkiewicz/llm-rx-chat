@@ -188,6 +188,12 @@ async function startChat() {
 						}
 					}
 				}
+				
+				// Flush remaining TTS buffer
+				if (CONFIG.TTS_ENABLED && sentenceBuffer.trim().length > 0) {
+					speak(sentenceBuffer.trim());
+					sentenceBuffer = "";
+				}
 
 				const toolCalls = Array.from(
 					toolCallMap.values(),
