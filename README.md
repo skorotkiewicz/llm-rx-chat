@@ -1,6 +1,6 @@
 # llm-rx-chat
 
-An elegant, continuous LLM chat interface featuring high-performance binary session persistence via [REXC](https://github.com/creationix/rx).
+An elegant LLM chat interface featuring high-performance binary session persistence via [REXC](https://github.com/creationix/rx).
 
 ## Features
 

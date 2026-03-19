@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as readline from "node:readline/promises";
 import { decode, stringify } from "@creationix/rx";
+import { clr } from "./lib/colors";
 
 // Configuration
 const API_BASE = process.env.API_BASE || "http://localhost:8000/v1";
@@ -29,37 +30,37 @@ async function startChat() {
 
 	let messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
 
-	// Load existing session if applicable
+	// Initialize session
 	if (sessionPath) {
 		await mkdir(historyDir, { recursive: true });
 		try {
 			const data = await readFile(sessionPath);
 			const loaded = decode(data) as ChatMessage[];
 			if (Array.isArray(loaded)) {
-				// Convert the read-only REXC proxy into a mutable JS array
+				// Convert REXC proxy into mutable JS array
 				messages = JSON.parse(JSON.stringify(loaded));
 				console.log(
-					`\x1b[1;32m[Session '${sessionName}' loaded (${messages.length} messages)]\x1b[0m\n`,
+					`${clr.user(`[Session '${sessionName}' loaded (${messages.length} messages)]`)}\n`,
 				);
 			}
 		} catch {
-			console.log(`\x1b[1;33m[Starting new session: ${sessionName}]\x1b[0m\n`);
+			console.log(`${clr.warn(`[Starting new session: ${sessionName}]`)}\n`);
 		}
 	}
 
 	console.log(
-		"\x1b[1;35m--- LLM Chat (Type 'exit' or 'quit' to end) ---\x1b[0m\n",
+		`${clr.system("--- LLM Chat (Type 'exit' or 'quit' to end) ---")}\n`,
 	);
 
 	try {
 		while (true) {
-			const prompt = await rl.question("\x1b[1;32mUser:\x1b[0m ");
+			const prompt = await rl.question(`${clr.user("User:")} `);
 
 			if (
 				!prompt ||
 				["exit", "quit", "q"].includes(prompt.toLowerCase().trim())
 			) {
-				console.log("\n\x1b[1;35mGoodbye!\x1b[0m");
+				console.log(`\n${clr.system("Goodbye!")}`);
 				break;
 			}
 
@@ -77,11 +78,9 @@ async function startChat() {
 				}),
 			});
 
-			if (!response.body) {
-				throw new Error("API returned an empty body.");
-			}
+			if (!response.body) throw new Error("API returned an empty body.");
 
-			process.stdout.write("\x1b[1;36mAI:\x1b[0m ");
+			process.stdout.write(`${clr.ai("AI:")} `);
 
 			const reader = response.body.getReader();
 			const decoderTool = new TextDecoder();
@@ -131,10 +130,10 @@ async function startChat() {
 				await writeFile(sessionPath, rxData);
 			}
 		}
-	} catch (error) {
+	} catch (err) {
 		console.error(
-			"\x1b[1;31mError:\x1b[0m",
-			error instanceof Error ? error.message : error,
+			`${clr.error("Error:")}`,
+			err instanceof Error ? err.message : err,
 		);
 	} finally {
 		rl.close();
