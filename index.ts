@@ -2,6 +2,7 @@ import * as readline from "node:readline/promises";
 import { clr } from "./lib/colors";
 import { type ChatState, handleCommand } from "./lib/commands";
 import { CONFIG, getSystemPrompt } from "./lib/config";
+import { rag } from "./lib/rag";
 import { loadHistory, saveHistory } from "./lib/session";
 import { iterTokens, rxWrite } from "./lib/stream";
 
@@ -46,6 +47,18 @@ async function startChat() {
 		state.messages = [{ role: "system", content: getSystemPrompt() }];
 	}
 
+	// Initialize RAG (Optional)
+	const hotwords = new Set<string>();
+	if (CONFIG.RAG_ENABLED) {
+		await rag.init();
+		const extracted = await rag.getKeywords();
+		for (const w of extracted) {
+			hotwords.add(w);
+		}
+	} else {
+		console.log(`${clr.warn("[Status: RAG Intelligence Disabled]")}\n`);
+	}
+
 	console.log(`${clr.system("--- LLM Chat (Type /help for commands) ---")}\n`);
 
 	try {
@@ -59,17 +72,46 @@ async function startChat() {
 			if (input.startsWith("/")) {
 				const cmdAction = await handleCommand(input, state);
 				if (cmdAction === "break") break;
-				if (cmdAction === "continue") continue;
+				if (cmdAction === "continue") {
+					// Reload hotwords in case they changed
+					if (CONFIG.RAG_ENABLED) {
+						hotwords.clear();
+						const extracted = await rag.getKeywords();
+						for (const w of extracted) {
+							hotwords.add(w);
+						}
+					}
+					continue;
+				}
 			}
 
 			state.messages.push({ role: "user", content: input });
+
+			// Autonomous RAG (Optional)
+			const apiMessages = [...state.messages];
+			const inputWords = input.toLowerCase().split(/\s+/);
+			const hasHotword = inputWords.some((w) => hotwords.has(w));
+
+			if (CONFIG.RAG_ENABLED && (hasHotword || inputWords.length >= 6)) {
+				const context = await rag.search(input);
+				if (context.length > 0) {
+					process.stdout.write(
+						`${clr.system(`[Knowledge Search: Found ${context.length} relevant chunks]`)}\n`,
+					);
+					const ragContext = `[KNOWLEDGE BASE CONTEXT]\n${context.join("\n---\n")}`;
+					apiMessages.splice(apiMessages.length - 1, 0, {
+						role: "system",
+						content: ragContext,
+					});
+				}
+			}
 
 			const response = await fetch(`${CONFIG.API_BASE}/chat/completions`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					model: CONFIG.MODEL,
-					messages: state.messages,
+					messages: apiMessages,
 					stream: true,
 					stop: ["<|im_end|>"],
 				}),

@@ -4,12 +4,16 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/pg": "^8.18.0"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
-    "@creationix/rx": "^0.7.4"
+    "@creationix/rx": "^0.7.4",
+    "cheerio": "^1.2.0",
+    "pg": "^8.20.0",
+    "pgvector": "^0.2.1"
   }
 }

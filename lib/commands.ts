@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import { clr } from "./colors";
 import { CONFIG, getSystemPrompt } from "./config";
+import { rag } from "./rag";
 import {
 	deleteSession,
 	listSessions,
@@ -26,11 +27,14 @@ export async function handleCommand(
 ): Promise<CommandResult> {
 	if (!input.startsWith("/")) return "none";
 
-	const [cmd, ...args] = input.toLowerCase().split(" ");
+	const parts = input.split(" ");
+	const cmd = (parts[0] || "").toLowerCase();
+	if (!cmd) return "none";
+	const args = parts.slice(1);
 
 	if (cmd === "/help") {
 		console.log(
-			`${clr.system("\n--- Commands ---")}\n/help           - This menu\n/info           - Session status\n/sessions       - List available histories\n/load <name>    - Switch conversation\n/del <name>     - Delete a session\n/system <p>     - Change persona\n/clear          - Reset context\n/save           - Force save\n/exit           - Quit\n`,
+			`${clr.system("\n--- Commands ---")}\n/help           - This menu\n/info           - Session status\n/sessions       - List available histories\n/load <name>    - Switch conversation\n/del <name>     - Delete a session\n/add-rag <url>  - Index a website\n/del-rag <url>  - Remove indexed content\n/list-rag       - Show indexed docs & hotwords\n/system <p>     - Change persona\n/clear          - Reset context\n/save           - Force save\n/exit           - Quit\n`,
 		);
 		return "continue";
 	}
@@ -133,6 +137,77 @@ export async function handleCommand(
 		}
 		await saveHistory(state.sessionName, state.historyDir, state.messages);
 		console.log(`${clr.warn("\nSaved.")}\n`);
+		return "continue";
+	}
+
+	if (cmd === "/add-rag") {
+		if (!CONFIG.RAG_ENABLED) {
+			console.log(`${clr.warn("RAG is currently disabled in .env")}\n`);
+			return "continue";
+		}
+		const url = args[0];
+		if (!url) {
+			process.stdout.write(`${clr.warn("Usage: /add-rag <url|path>")}\n`);
+			return "continue";
+		}
+		process.stdout.write(`${clr.system(`Indexing ${url}...`)} `);
+		try {
+			// Ensure initialized
+			await rag.init();
+			const count = await rag.indexSource(url);
+			process.stdout.write(`${clr.warn(`Done. [${count} chunks indexed]`)}\n`);
+		} catch (err) {
+			process.stdout.write(
+				`${clr.error(`Failed: ${err instanceof Error ? err.message : err}`)}\n`,
+			);
+		}
+		return "continue";
+	}
+
+	if (cmd === "/list-rag") {
+		if (!CONFIG.RAG_ENABLED) {
+			console.log(`${clr.warn("RAG is currently disabled in .env")}\n`);
+			return "continue";
+		}
+		const sources = await rag.listSources();
+		console.log(`${clr.system("\n--- Indexed Knowledge ---")}`);
+		if (sources.length === 0) {
+			console.log("No documents indexed.");
+		} else {
+			for (const s of sources) {
+				console.log(`- ${s}`);
+			}
+		}
+
+		const kws = Array.from(await rag.getKeywords());
+		console.log(`${clr.system("\n--- Active Hotwords ---")}`);
+		if (kws.length === 0) {
+			console.log("No technical terms mapped.");
+		} else {
+			console.log(kws.join(", "));
+		}
+		console.log("");
+		return "continue";
+	}
+
+	if (cmd === "/del-rag") {
+		if (!CONFIG.RAG_ENABLED) {
+			console.log(`${clr.warn("RAG is currently disabled in .env")}\n`);
+			return "continue";
+		}
+		const url = args[0];
+		if (!url) {
+			process.stdout.write(`${clr.warn("Usage: /del-rag <url|path>")}\n`);
+			return "continue";
+		}
+		try {
+			await rag.deleteSource(url);
+			console.log(`${clr.warn(`\n[Knowledge Source '${url}' purged from RAG]`)}\n`);
+		} catch (err) {
+			process.stdout.write(
+				`${clr.error(`Failed: ${err instanceof Error ? err.message : err}`)}\n`,
+			);
+		}
 		return "continue";
 	}
 
