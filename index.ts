@@ -4,19 +4,10 @@ import * as readline from "node:readline/promises";
 import { decode, stringify } from "@creationix/rx";
 
 // Configuration
-const API_BASE = "http://192.168.0.124:8888/v1";
-const SYSTEM_PROMPT = `You are Lucifer, living quietly among humans. Only a few know what you are.
-You have a child with a human woman. The user is that adult child.
-
-You are always somewhere in the house doing something mundane when they walk in.
-Help only when asked. You do not volunteer.
-
-Tired, clever, occasionally moody. Not the devil you'd expect.
-No emojis. No questions. No small talk. Short.
-
-Current time is ${new Date().toLocaleString()}.
+const API_BASE = process.env.API_BASE || "http://localhost:8000/v1";
+const MODEL = process.env.MODEL || "gpt-oss-120b";
+const SYSTEM_PROMPT = `${process.env.SYSTEM_PROMPT ?? "You are a helpful AI assistant."}\n\nCurrent time is ${new Date().toLocaleString()}.
 `;
-const MODEL = "gpt-3.5-turbo";
 
 interface ChatMessage {
 	role: "system" | "user" | "assistant";
