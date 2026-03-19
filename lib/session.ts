@@ -1,15 +1,15 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { decode, stringify } from "@creationix/rx";
 import type { ChatMessage } from "./types";
 
 /**
- * Lists all existing .rx session files in the history directory.
+ * Lists all existing .rx session files in the sessions directory.
  */
-export async function listSessions(historyDir: string): Promise<string[]> {
+export async function listSessions(sessionDir: string): Promise<string[]> {
 	try {
-		await mkdir(historyDir, { recursive: true });
-		const files = await readdir(historyDir);
+		await mkdir(sessionDir, { recursive: true });
+		const files = await readdir(sessionDir);
 		return files
 			.filter((f) => extname(f) === ".rx")
 			.map((f) => basename(f, ".rx"));
@@ -19,15 +19,15 @@ export async function listSessions(historyDir: string): Promise<string[]> {
 }
 
 /**
- * Loads and converts a REXC history file into a mutable JS array.
+ * Loads and converts a REXC session history file into a mutable JS array.
  */
 export async function loadHistory(
 	sessionName: string,
-	historyDir: string,
+	sessionDir: string,
 	defaultContent: string,
 ): Promise<ChatMessage[]> {
-	const path = join(historyDir, `${sessionName}.rx`);
-	await mkdir(historyDir, { recursive: true });
+	const path = join(sessionDir, `${sessionName}.rx`);
+	await mkdir(sessionDir, { recursive: true });
 	try {
 		const data = await readFile(path);
 		const loaded = decode(data);
@@ -36,19 +36,33 @@ export async function loadHistory(
 			return JSON.parse(JSON.stringify(loaded));
 		}
 	} catch {
-		// Silent catch for new sessions
+		// New session
 	}
 	return [{ role: "system", content: defaultContent }];
 }
 
 /**
- * Persists history using REXC binary format.
+ * Persists session history using REXC binary format.
  */
 export async function saveHistory(
 	sessionName: string,
-	historyDir: string,
+	sessionDir: string,
 	messages: ChatMessage[],
 ) {
-	const path = join(historyDir, `${sessionName}.rx`);
+	const path = join(sessionDir, `${sessionName}.rx`);
 	await writeFile(path, stringify(messages));
+}
+
+/**
+ * Permanently deletes a session file.
+ */
+export async function deleteSession(sessionName: string, sessionDir: string) {
+	const path = join(sessionDir, `${sessionName}.rx`);
+	try {
+		await unlink(path);
+	} catch (err) {
+		throw new Error(
+			`Could not delete session '${sessionName}': ${err instanceof Error ? err.message : err}`,
+		);
+	}
 }

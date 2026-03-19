@@ -1,6 +1,12 @@
+import { basename } from "node:path";
 import { clr } from "./colors";
 import { CONFIG, getSystemPrompt } from "./config";
-import { listSessions, loadHistory, saveHistory } from "./session";
+import {
+	deleteSession,
+	listSessions,
+	loadHistory,
+	saveHistory,
+} from "./session";
 import type { ChatMessage } from "./types";
 
 export interface ChatState {
@@ -24,7 +30,7 @@ export async function handleCommand(
 
 	if (cmd === "/help") {
 		console.log(
-			`${clr.system("\n--- Commands ---")}\n/help           - This menu\n/info           - Session status\n/sessions       - List available histories\n/load <name>    - Switch conversation\n/system <p>     - Change persona\n/clear          - Reset context\n/save           - Force save\n/exit           - Quit\n`,
+			`${clr.system("\n--- Commands ---")}\n/help           - This menu\n/info           - Session status\n/sessions       - List available histories\n/load <name>    - Switch conversation\n/del <name>     - Delete a session\n/system <p>     - Change persona\n/clear          - Reset context\n/save           - Force save\n/exit           - Quit\n`,
 		);
 		return "continue";
 	}
@@ -44,21 +50,46 @@ export async function handleCommand(
 	}
 
 	if (cmd === "/load") {
-		const name = args[0];
-		if (!name) {
+		const nameArg = args[0];
+		if (!nameArg) {
 			console.log(
 				`${clr.error("Provide a session name. Example: /load home")}\n`,
 			);
 			return "continue";
 		}
+		const name = basename(nameArg);
 
 		const loaded = await loadHistory(name, state.historyDir, getSystemPrompt());
 		state.messages.splice(0, state.messages.length, ...loaded);
-		state.sessionName = name; // Update the shared state
+		state.sessionName = name;
 
 		console.log(
 			`${clr.user(`\n[Session '${name}' loaded (${state.messages.length} messages)]`)}\n`,
 		);
+		return "continue";
+	}
+
+	if (cmd === "/del" || cmd === "/delete") {
+		const nameArg = args[0];
+		if (!nameArg) {
+			console.log(
+				`${clr.error("Provide a session name. Example: /del home")}\n`,
+			);
+			return "continue";
+		}
+		const name = basename(nameArg);
+
+		try {
+			await deleteSession(name, state.historyDir);
+			if (state.sessionName === name) {
+				state.sessionName = null; // Revert to volatile if deleted current
+			}
+			console.log(`${clr.warn(`\n[Session '${name}' deleted]`)}\n`);
+		} catch (err) {
+			console.log(
+				`${clr.error(`\n${err instanceof Error ? err.message : err}`)}\n`,
+			);
+		}
 		return "continue";
 	}
 
