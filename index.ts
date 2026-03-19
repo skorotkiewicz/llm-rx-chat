@@ -1,15 +1,24 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import * as readline from "node:readline/promises";
-import { stringify } from "@creationix/rx";
+import { decode, stringify } from "@creationix/rx";
 
-// Configuration - matches your requested endpoint
+// Configuration
 const API_BASE = "http://192.168.0.124:8888/v1";
 const SYSTEM_PROMPT = "You are a helpful AI assistant.";
-const MODEL = "gpt-3.5-turbo"; // or the ID of your local model
+const MODEL = "gpt-3.5-turbo";
 
 interface ChatMessage {
 	role: "system" | "user" | "assistant";
 	content: string;
 }
+
+// Parse session flag
+const sessionArgIndex = process.argv.indexOf("-s");
+const sessionName =
+	sessionArgIndex !== -1 ? process.argv[sessionArgIndex + 1] : null;
+const historyDir = "history";
+const sessionPath = sessionName ? join(historyDir, `${sessionName}.rx`) : null;
 
 async function startChat() {
 	const rl = readline.createInterface({
@@ -17,7 +26,25 @@ async function startChat() {
 		output: process.stdout,
 	});
 
-	const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+	let messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+
+	// Load existing session if applicable
+	if (sessionPath) {
+		await mkdir(historyDir, { recursive: true });
+		try {
+			const data = await readFile(sessionPath);
+			const loaded = decode(data) as ChatMessage[];
+			if (Array.isArray(loaded)) {
+				// Convert the read-only REXC proxy into a mutable JS array
+				messages = JSON.parse(JSON.stringify(loaded));
+				console.log(
+					`\x1b[1;32m[Session '${sessionName}' loaded (${messages.length} messages)]\x1b[0m\n`,
+				);
+			}
+		} catch {
+			console.log(`\x1b[1;33m[Starting new session: ${sessionName}]\x1b[0m\n`);
+		}
+	}
 
 	console.log(
 		"\x1b[1;35m--- LLM Chat (Type 'exit' or 'quit' to end) ---\x1b[0m\n",
@@ -28,9 +55,8 @@ async function startChat() {
 			const prompt = await rl.question("\x1b[1;32mUser:\x1b[0m ");
 
 			if (
-				prompt.toLowerCase() === "exit" ||
-				prompt.toLowerCase() === "quit" ||
-				prompt.toLowerCase() === "q"
+				!prompt ||
+				["exit", "quit", "q"].includes(prompt.toLowerCase().trim())
 			) {
 				console.log("\n\x1b[1;35mGoodbye!\x1b[0m");
 				break;
@@ -57,7 +83,7 @@ async function startChat() {
 			process.stdout.write("\x1b[1;36mAI:\x1b[0m ");
 
 			const reader = response.body.getReader();
-			const decoder = new TextDecoder();
+			const decoderTool = new TextDecoder();
 			let buffer = "";
 			let fullAssistantResponse = "";
 
@@ -65,10 +91,7 @@ async function startChat() {
 				const { done, value } = await reader.read();
 				if (done) break;
 
-				// Decode the raw chunk and add to buffer
-				buffer += decoder.decode(value, { stream: true });
-
-				// Process lines (OpenAI streams are data-only SSE)
+				buffer += decoderTool.decode(value, { stream: true });
 				const lines = buffer.split("\n");
 				buffer = lines.pop() || "";
 
@@ -82,10 +105,6 @@ async function startChat() {
 							const token = data.choices[0]?.delta?.content;
 
 							if (token) {
-								/**
-								 * WE USE @creationix/rx HERE:
-								 * Filtered stream to remove metadata numbers while keeping stringify pattern.
-								 */
 								stringify(token, {
 									onChunk: (chunk) => {
 										if (!chunk.startsWith(",")) {
@@ -96,7 +115,7 @@ async function startChat() {
 								fullAssistantResponse += token;
 							}
 						} catch {
-							// Partial JSON chunk, skip
+							// Skip partial chunks
 						}
 					}
 				}
@@ -104,6 +123,12 @@ async function startChat() {
 
 			messages.push({ role: "assistant", content: fullAssistantResponse });
 			process.stdout.write("\n\n");
+
+			// Auto-save session after each exchange
+			if (sessionPath) {
+				const rxData = stringify(messages);
+				await writeFile(sessionPath, rxData);
+			}
 		}
 	} catch (error) {
 		console.error(
@@ -115,5 +140,4 @@ async function startChat() {
 	}
 }
 
-// Start the interactive session
 startChat();
