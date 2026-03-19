@@ -131,16 +131,18 @@ async function startChat() {
 				fullAssistantResponse += token;
 				sentenceBuffer += token;
 
-				// Speak on sentence end but don't block
-				const isSentenceEnd = /[.!?\n]/.test(token);
-				if (isSentenceEnd) {
-					const s = sentenceBuffer.trim();
-					// Ignore common short abbreviations to prevent choppy speech
-					const isAbbreviation =
-						/\b(mr|ms|mrs|dr|prof|vs|st|rd|oz|kg|lb)\.$/i.test(s);
-					if (s.length > 5 && !isAbbreviation) {
-						speak(s); // Background task
-						sentenceBuffer = "";
+				if (CONFIG.TTS_ENABLED) {
+					// Speak on sentence end but don't block
+					const isSentenceEnd = /[.!?\n]/.test(token);
+					if (isSentenceEnd) {
+						const s = sentenceBuffer.trim();
+						// Ignore common short abbreviations to prevent choppy speech
+						const isAbbreviation =
+							/\b(mr|ms|mrs|dr|prof|vs|st|rd|oz|kg|lb)\.$/i.test(s);
+						if (s.length > 5 && !isAbbreviation) {
+							speak(s); // Background task
+							sentenceBuffer = "";
+						}
 					}
 				}
 			}
