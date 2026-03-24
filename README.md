@@ -1,6 +1,6 @@
 # LLM-RX-CHAT
 
-A high-performance, terminal-based AI chat application powered by Bun and Pocket TTS. Now featuring a fully autonomous Agentic Workspace with secure tool-execution logic.
+A terminal-based AI chat application powered by Bun and Pocket TTS. With a fully autonomous Agentic Workspace with secure tool-execution logic.
 
 ## Key Features
 - Agentic Tools: Autonomous read_file, write_file, delete_file, run_command, and **web_search**.
@@ -31,8 +31,14 @@ uv run main.py
 ### 2. Launch AI (within its room)
 In your main project folder:
 ```bash
-# Start Lucifer (default /workspace)
+# Start (default ./workspace)
 bun index.ts -w workspace
+
+# Start with a session (./history/<session-name>)
+bun index.ts -s <session-name>
+
+# Start with a session and workspace
+bun index.ts -s <session-name> -w <workspace>
 ```
 
 ## Configuration (.env)
@@ -48,9 +54,17 @@ SYSTEM_PROMPT="You are Lucifer... Tired, clever, occasionally moody... You have 
 WORKSPACE=./workspace
 
 # TTS Configuration
-TTS_ENABLED=true
+TTS_ENABLED=false
 TTS_URL=http://localhost:8000
-TTS_VOICE=donald-trump
+TTS_VOICE=joe-biden
+
+# RAG Configuration
+RAG_ENABLED=false
+API_EMBEDDING_URL=http://localhost:8889/v1/embeddings
+POSTGRES_VECTOR_DIM=768
+POSTGRES_DB=vectordb
+POSTGRES_USER=vectoruser
+POSTGRES_PASSWORD=vectorpass
 ```
 
 ## Admin & CRUD
